@@ -1,5 +1,6 @@
+from __future__ import annotations
 import json
-from typing import Any
+from typing import Any, Dict, Optional
 
 from app.ai.structuring import call_claude
 
@@ -11,11 +12,11 @@ DOMAIN_SLUGS = [
 
 
 async def process_capture(
-    url: str | None = None,
-    file_content: bytes | None = None,
-    filename: str | None = None,
-    mime_type: str | None = None,
-) -> dict[str, Any]:
+    url: Optional[str] = None,
+    file_content: Optional[bytes] = None,
+    filename: Optional[str] = None,
+    mime_type: Optional[str] = None,
+) -> Dict[str, Any]:
     if url:
         prompt = f"""
 You are Synaptiq, a personal OS that organizes life documents.

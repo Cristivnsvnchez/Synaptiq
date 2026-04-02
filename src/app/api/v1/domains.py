@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -23,9 +25,8 @@ DOMAIN_SEEDS = [
 ]
 
 
-@router.get("/", response_model=list[DomainOut])
+@router.get("/", response_model=List[DomainOut])
 async def list_domains(db: AsyncSession = Depends(get_db)):
-    # Auto-seed domains if empty
     result = await db.execute(select(Domain))
     domains = result.scalars().all()
     if not domains:

@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -18,8 +20,8 @@ async def create_access(payload: AccessCreate, db: AsyncSession = Depends(get_db
     return access
 
 
-@router.get("/", response_model=list[AccessOut])
-async def list_accesses(entity_id: str | None = None, db: AsyncSession = Depends(get_db)):
+@router.get("/", response_model=List[AccessOut])
+async def list_accesses(entity_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     q = select(Access)
     if entity_id:
         q = q.where(Access.entity_id == entity_id)

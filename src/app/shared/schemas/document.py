@@ -1,6 +1,7 @@
+from __future__ import annotations
 from pydantic import BaseModel
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Optional
 from app.shared.models.document import DocumentStatus
 
 
@@ -8,11 +9,11 @@ class DocumentOut(BaseModel):
     id: str
     entity_id: str
     filename: str
-    mime_type: str | None
-    doc_type: str | None
+    mime_type: Optional[str]
+    doc_type: Optional[str]
     status: DocumentStatus
-    expires_at: date | None
-    ai_extracted_data: dict[str, Any] | None
+    expires_at: Optional[date]
+    ai_extracted_data: Optional[dict[str, Any]]
     created_at: datetime
     updated_at: datetime
 

@@ -1,21 +1,22 @@
+from __future__ import annotations
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 
 class EntityCreate(BaseModel):
     domain_id: str
     name: str
     type: str
-    metadata_: dict[str, Any] | None = None
-    notes: str | None = None
+    metadata_: Optional[dict[str, Any]] = None
+    notes: Optional[str] = None
 
 
 class EntityUpdate(BaseModel):
-    name: str | None = None
-    type: str | None = None
-    metadata_: dict[str, Any] | None = None
-    notes: str | None = None
+    name: Optional[str] = None
+    type: Optional[str] = None
+    metadata_: Optional[dict[str, Any]] = None
+    notes: Optional[str] = None
 
 
 class EntityOut(BaseModel):
@@ -23,8 +24,8 @@ class EntityOut(BaseModel):
     domain_id: str
     name: str
     type: str
-    metadata_: dict[str, Any] | None
-    notes: str | None
+    metadata_: Optional[dict[str, Any]]
+    notes: Optional[str]
     created_at: datetime
     updated_at: datetime
 

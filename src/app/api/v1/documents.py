@@ -1,5 +1,7 @@
+from __future__ import annotations
 import os
 import shutil
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,8 +18,8 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
 @router.post("/upload", response_model=DocumentOut, status_code=201)
 async def upload_document(
     entity_id: str = Form(...),
-    doc_type: str | None = Form(None),
-    expires_at: str | None = Form(None),
+    doc_type: Optional[str] = Form(None),
+    expires_at: Optional[str] = Form(None),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ):
@@ -45,8 +47,8 @@ async def upload_document(
     return doc
 
 
-@router.get("/", response_model=list[DocumentOut])
-async def list_documents(entity_id: str | None = None, db: AsyncSession = Depends(get_db)):
+@router.get("/", response_model=List[DocumentOut])
+async def list_documents(entity_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     q = select(Document)
     if entity_id:
         q = q.where(Document.entity_id == entity_id)

@@ -1,6 +1,8 @@
+from __future__ import annotations
+from typing import List, Dict, Any
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select
 from datetime import date, timedelta
 from pydantic import BaseModel
 
@@ -22,9 +24,9 @@ class DomainHealth(BaseModel):
 
 
 class DashboardOut(BaseModel):
-    attention_required: list[dict]
-    upcoming_30_days: list[dict]
-    domains_health: list[DomainHealth]
+    attention_required: List[Dict[str, Any]]
+    upcoming_30_days: List[Dict[str, Any]]
+    domains_health: List[DomainHealth]
 
 
 @router.get("/", response_model=DashboardOut)
@@ -32,7 +34,6 @@ async def get_dashboard(db: AsyncSession = Depends(get_db)):
     today = date.today()
     in_30_days = today + timedelta(days=30)
 
-    # Expired or expiring documents
     exp_result = await db.execute(
         select(Document).where(
             Document.expires_at <= in_30_days,
@@ -41,8 +42,9 @@ async def get_dashboard(db: AsyncSession = Depends(get_db)):
     )
     expiring_docs = exp_result.scalars().all()
 
-    attention = []
-    upcoming = []
+    attention: List[Dict[str, Any]] = []
+    upcoming: List[Dict[str, Any]] = []
+
     for doc in expiring_docs:
         item = {
             "type": "document",
@@ -56,7 +58,6 @@ async def get_dashboard(db: AsyncSession = Depends(get_db)):
         else:
             upcoming.append(item)
 
-    # Pending reminders in 30 days
     rem_result = await db.execute(
         select(Reminder).where(
             Reminder.trigger_date <= in_30_days,
@@ -76,9 +77,7 @@ async def get_dashboard(db: AsyncSession = Depends(get_db)):
         else:
             upcoming.append(item)
 
-    # Domain health (simplified)
     domains_result = await db.execute(select(Domain))
-    domains = domains_result.scalars().all()
     domains_health = [
         DomainHealth(
             slug=d.slug,
@@ -88,7 +87,7 @@ async def get_dashboard(db: AsyncSession = Depends(get_db)):
             expired_docs=0,
             pending_reminders=0,
         )
-        for d in domains
+        for d in domains_result.scalars().all()
     ]
 
     return DashboardOut(

@@ -1,7 +1,9 @@
+from __future__ import annotations
+from typing import Optional
 import anthropic
 from app.core.config import settings
 
-_client: anthropic.AsyncAnthropic | None = None
+_client: Optional[anthropic.AsyncAnthropic] = None
 
 
 def get_client() -> anthropic.AsyncAnthropic:

@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import List
 from sqlalchemy import String, Integer
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 
@@ -14,4 +16,4 @@ class Domain(Base, TimestampMixin):
     icon: Mapped[str] = mapped_column(String, default="📁")
     health_score: Mapped[int] = mapped_column(Integer, default=100)
 
-    entities: Mapped[list["Entity"]] = relationship(back_populates="domain")
+    entities: Mapped[List["Entity"]] = relationship(back_populates="domain")

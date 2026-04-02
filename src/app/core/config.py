@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     storage_path: str = "./storage"
 
     class Config:
-        env_file = ".env"
+        env_file = (".env", "../.env", "../../.env")
 
 
 settings = Settings()

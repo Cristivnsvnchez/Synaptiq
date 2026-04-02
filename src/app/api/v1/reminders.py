@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -18,9 +20,9 @@ async def create_reminder(payload: ReminderCreate, db: AsyncSession = Depends(ge
     return reminder
 
 
-@router.get("/", response_model=list[ReminderOut])
+@router.get("/", response_model=List[ReminderOut])
 async def list_reminders(
-    status: ReminderStatus | None = None,
+    status: Optional[ReminderStatus] = None,
     db: AsyncSession = Depends(get_db),
 ):
     q = select(Reminder)
