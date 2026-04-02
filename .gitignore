@@ -30,3 +30,9 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Storage (uploaded files)
+storage/
+
+# Alembic
+alembic/versions/*.pyc
