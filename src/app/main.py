@@ -2,12 +2,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
+from app.core.scheduler import start_scheduler, scheduler
 from app.api.v1 import capture, domains, entities, documents, accesses, reminders, dashboard
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    yield  # Tables managed by Alembic
+    start_scheduler()
+    yield
+    scheduler.shutdown()
 
 
 app = FastAPI(

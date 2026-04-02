@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.config import settings
 from app.shared.models.document import Document, DocumentStatus
 from app.shared.schemas.document import DocumentOut, DocumentStatusUpdate
+from app.services.document_service import create_expiry_reminders, sync_expired_documents
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -33,6 +34,11 @@ async def upload_document(
     from datetime import date
     exp = date.fromisoformat(expires_at) if expires_at else None
 
+    # Determine initial status based on expiry
+    status = DocumentStatus.valid
+    if exp and exp < date.today():
+        status = DocumentStatus.expired
+
     doc = Document(
         entity_id=entity_id,
         filename=file.filename,
@@ -40,19 +46,57 @@ async def upload_document(
         mime_type=file.content_type,
         doc_type=doc_type,
         expires_at=exp,
+        status=status,
     )
     db.add(doc)
     await db.commit()
     await db.refresh(doc)
+
+    # Auto-create expiry reminders
+    await create_expiry_reminders(db, doc)
+
     return doc
 
 
 @router.get("/", response_model=List[DocumentOut])
-async def list_documents(entity_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+async def list_documents(
+    entity_id: Optional[str] = None,
+    status: Optional[DocumentStatus] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    # Sync expired docs on read
+    await sync_expired_documents(db)
+
     q = select(Document)
     if entity_id:
         q = q.where(Document.entity_id == entity_id)
-    result = await db.execute(q)
+    if status:
+        q = q.where(Document.status == status)
+    result = await db.execute(q.order_by(Document.expires_at.asc().nullslast()))
+    return result.scalars().all()
+
+
+@router.get("/expiring", response_model=List[DocumentOut])
+async def list_expiring_documents(
+    days: int = 30,
+    db: AsyncSession = Depends(get_db),
+):
+    """Documents expiring within the next N days (default 30)."""
+    from datetime import date, timedelta
+    today = date.today()
+    limit = today + timedelta(days=days)
+
+    await sync_expired_documents(db)
+
+    result = await db.execute(
+        select(Document)
+        .where(
+            Document.expires_at <= limit,
+            Document.expires_at >= today,
+            Document.status != DocumentStatus.archived,
+        )
+        .order_by(Document.expires_at)
+    )
     return result.scalars().all()
 
 

@@ -13,11 +13,18 @@ def get_client() -> anthropic.AsyncAnthropic:
     return _client
 
 
-async def call_claude(prompt: str, model: str = "claude-sonnet-4-6") -> str:
+async def call_claude(
+    prompt: str,
+    system: Optional[str] = None,
+    model: str = "claude-sonnet-4-6",
+) -> str:
     client = get_client()
-    message = await client.messages.create(
+    kwargs = dict(
         model=model,
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}],
     )
+    if system:
+        kwargs["system"] = system
+    message = await client.messages.create(**kwargs)
     return message.content[0].text
