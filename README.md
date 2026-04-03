@@ -1,90 +1,172 @@
 # Synaptiq 🧠
 
-**Your personal learning brain** — capture what you learn, structure it automatically, track your progress.
+**Personal OS — ton second cerveau.**
+Organise chaque dimension de ta vie : documents, finances, santé, logement, travail, véhicule, voyages... L'IA structure automatiquement, relie les éléments entre eux, et signale ce qui demande attention.
 
-## What is Synaptiq?
+---
 
-Synaptiq is a personal learning dashboard that solves one real problem: when you're learning something new (SAP, Power Platform, Python...), documenting what you understand is tedious. Synaptiq lets you dump raw notes in natural language, structures them automatically with AI, and pushes them to Notion or OneNote — so you can focus on learning, not formatting.
+## Lancer l'application
 
-## Core Features (MVP)
+Une seule commande suffit :
 
-| Feature | Description |
+```bash
+cd "/Users/cristiansanchez/Library/Mobile Documents/com~apple~CloudDocs/Claude/Synaptiq"
+./start.sh
+```
+
+Le script fait tout automatiquement :
+- Démarre PostgreSQL
+- Lance l'API FastAPI sur `http://localhost:8000`
+- Lance le frontend Next.js sur `http://localhost:3000`
+- Ouvre le navigateur automatiquement
+
+**Ctrl+C** pour tout arrêter proprement.
+
+---
+
+## Prérequis (déjà installés)
+
+- Python 3.9 + venv (`venv/`)
+- PostgreSQL 16 (via Homebrew)
+- Node.js 22
+- Base de données `synaptiq` créée et migrée
+
+---
+
+## Configuration
+
+Copie `.env.example` → `.env` et remplis :
+
+```env
+DATABASE_URL=postgresql+asyncpg://ton_user@localhost:5432/synaptiq
+SECRET_KEY=changeme
+ANTHROPIC_API_KEY=sk-ant-...
+STORAGE_PATH=./storage
+```
+
+---
+
+## Stack technique
+
+| Composant | Technologie |
 |---|---|
-| 📝 Note Capture | Paste raw notes → AI structures them into titles, summaries, key concepts |
-| 🗺️ Learning Paths | Create structured paths (e.g. "SAP Fundamentals") with steps and progression |
-| 📊 Dashboard | Full view of what you know, your gaps, your streak, your next step |
-| 🔗 Notion sync | Structured notes pushed automatically to your Notion workspace |
-| 🔗 OneNote sync | Alternative: push to OneNote via Microsoft Graph API (free) |
+| Backend | FastAPI (Python 3.9) |
+| Base de données | PostgreSQL 16 + SQLAlchemy async |
+| Migrations | Alembic |
+| IA | Anthropic Claude API |
+| Scheduler | APScheduler |
+| Frontend | Next.js 16 + Tailwind + shadcn/ui |
+| Data fetching | TanStack Query |
 
-## Project Structure
+---
+
+## Structure du projet
 
 ```
 Synaptiq/
-├── src/
-│   └── app/
-│       ├── main.py                  # FastAPI entry point
-│       ├── routers/
-│       │   ├── notes.py             # Note capture & retrieval
-│       │   ├── paths.py             # Learning paths & steps
-│       │   └── progress.py          # Dashboard & progress
-│       ├── schemas/
-│       │   ├── note.py              # Note data models
-│       │   ├── path.py              # Learning path models
-│       │   └── progress.py          # Dashboard models
-│       └── integrations/
-│           ├── notion.py            # Notion API integration
-│           └── onenote.py           # Microsoft Graph / OneNote
-├── tests/
-├── docs/
-├── design/
-├── phases/
-├── .env.example
-├── requirements.txt
-└── README.md
+├── start.sh                    # Lance tout en une commande
+├── .env                        # Variables d'environnement (non versionné)
+├── .env.example                # Template
+├── requirements.txt            # Dépendances Python
+├── REQUIREMENTS.md             # BRD complet (vision, features, modèles)
+│
+├── src/app/
+│   ├── main.py                 # FastAPI entry point
+│   ├── core/
+│   │   ├── config.py           # Settings
+│   │   ├── database.py         # SQLAlchemy async
+│   │   └── scheduler.py        # APScheduler (jobs quotidiens)
+│   ├── shared/
+│   │   ├── models/             # Domain, Entity, Document, Access, Reminder
+│   │   └── schemas/            # Schémas Pydantic
+│   ├── ai/
+│   │   ├── capture.py          # Extraction URL / fichier
+│   │   ├── structuring.py      # Client Claude API
+│   │   ├── extraction.py       # PDF + fetch URL
+│   │   └── routing.py          # Auto-routing par mots-clés
+│   ├── api/v1/
+│   │   ├── capture.py          # POST /capture/url et /capture/file
+│   │   ├── domains.py          # GET /domains/
+│   │   ├── entities.py         # CRUD /entities/
+│   │   ├── documents.py        # Upload, download, statut
+│   │   ├── accesses.py         # CRUD /accesses/
+│   │   ├── reminders.py        # CRUD + dismiss
+│   │   └── dashboard.py        # Vue globale
+│   └── services/
+│       └── document_service.py # Auto-expiry + reminders J-90/J-30/J-7
+│
+├── alembic/                    # Migrations DB
+├── storage/                    # Fichiers uploadés (non versionné)
+│
+└── frontend/
+    ├── app/
+    │   ├── page.tsx            # Dashboard
+    │   ├── capture/page.tsx    # AI Capture
+    │   ├── domains/[slug]/     # Vue par domaine
+    │   └── entities/[id]/      # Vue d'une entité
+    ├── components/
+    │   ├── layout/Sidebar.tsx
+    │   └── dashboard/          # StatCard, DomainHealthGrid, AttentionFeed
+    ├── lib/
+    │   ├── api.ts              # Toutes les fonctions d'appel API
+    │   └── providers.tsx       # TanStack Query provider
+    └── types/index.ts          # Types TypeScript
 ```
 
-## Setup
+---
 
-```bash
-# 1. Clone and enter the project
-cd Synaptiq
+## API
 
-# 2. Create a virtual environment
-python -m venv venv
-source venv/bin/activate  # Mac/Linux
+Swagger disponible sur : **http://localhost:8000/docs**
 
-# 3. Install dependencies
-pip install -r requirements.txt
+| Endpoint | Description |
+|---|---|
+| `GET /api/v1/dashboard/` | Vue globale — alertes, timeline, health scores |
+| `GET /api/v1/domains/` | Liste des 11 domaines |
+| `GET /api/v1/entities/` | Entités (filtrables par domain_id) |
+| `POST /api/v1/entities/` | Créer une entité |
+| `POST /api/v1/documents/upload` | Uploader un fichier |
+| `GET /api/v1/documents/expiring` | Documents expirant bientôt |
+| `POST /api/v1/capture/file` | Analyser un fichier avec Claude |
+| `POST /api/v1/capture/url` | Analyser une URL avec Claude |
+| `POST /api/v1/reminders/` | Créer un reminder |
+| `PATCH /api/v1/reminders/{id}/dismiss` | Dismisser un reminder |
 
-# 4. Configure environment variables
-cp .env.example .env
-# → Fill in your Notion token and/or Microsoft credentials
+---
 
-# 5. Run the API
-cd src
-uvicorn app.main:app --reload
-```
+## Domaines de vie
 
-## API Docs
+| # | Slug | Label |
+|---|---|---|
+| 1 | `identity` | Identité & Documents officiels |
+| 2 | `housing` | Logement |
+| 3 | `finance` | Finance |
+| 4 | `work` | Travail |
+| 5 | `health` | Santé |
+| 6 | `learning` | Learning |
+| 7 | `vehicle` | Véhicule |
+| 8 | `travel` | Voyage |
+| 9 | `subscriptions` | Abonnements & Assets |
+| 10 | `contacts` | Contacts clés |
+| 11 | `projects` | Projets personnels |
 
-Once running: **http://localhost:8000/docs**
+---
 
-## Integrations Setup
+## Jobs automatiques (APScheduler)
 
-### Notion (recommended, free)
-1. Go to https://www.notion.so/my-integrations
-2. Create a new integration → copy the token
-3. Share your target Notion database with the integration
-4. Add `NOTION_TOKEN` and `NOTION_DATABASE_ID` to your `.env`
+| Heure | Job | Description |
+|---|---|---|
+| 00h05 | `sync_expired_documents` | Passe les docs expirés en statut `expired` |
+| 00h10 | `fire_due_reminders` | Déclenche les reminders échus (`pending` → `sent`) |
 
-### OneNote (free with any Microsoft account)
-1. Go to https://portal.azure.com → App registrations
-2. Register a new app → add `Notes.ReadWrite` permission
-3. Add `MS_CLIENT_ID`, `MS_CLIENT_SECRET` to your `.env`
+Les reminders J-90 / J-30 / J-7 sont créés automatiquement à l'upload d'un document avec date d'expiration.
 
-## Tech Stack
+---
 
-- **Backend**: FastAPI (Python)
-- **AI structuring**: OpenAI API
-- **Note storage**: Notion API or Microsoft Graph (OneNote)
-- **Frontend** *(planned)*: Power Apps
+## Phases
+
+- **Phase 1 (MVP) ✅** — Document Vault, AI Capture, Smart Reminders, Dashboard
+- **Phase 2** — Context View, Quick Capture, Relationship Graph, Life Metrics
+- **Phase 3** — Decision Vault, Emergency Package, Extension Chrome, Synaptiq Inbox
+
+Voir `REQUIREMENTS.md` pour le BRD complet.
