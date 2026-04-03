@@ -36,3 +36,5 @@ storage/
 
 # Alembic
 alembic/versions/*.pyc
+frontend/.git
+frontend/.git
