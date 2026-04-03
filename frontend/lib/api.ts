@@ -1,7 +1,8 @@
 import axios from 'axios'
 
+// Utilise le proxy Next.js → évite tout problème CORS
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
+  baseURL: '/api/v1',
   headers: { 'Content-Type': 'application/json' },
 })
 
@@ -16,8 +17,8 @@ export const getDashboard = () => api.get('/dashboard/').then(r => r.data)
 export const getEntities = (domain_id?: string) =>
   api.get('/entities/', { params: domain_id ? { domain_id } : {} }).then(r => r.data)
 export const getEntity = (id: string) => api.get(`/entities/${id}`).then(r => r.data)
-export const createEntity = (data: { domain_id: string; name: string; type: string; notes?: string }) =>
-  api.post('/entities/', data).then(r => r.data)
+export const createEntity = (data: object) => api.post('/entities/', data).then(r => r.data)
+export const updateEntity = (id: string, data: object) => api.patch(`/entities/${id}`, data).then(r => r.data)
 export const deleteEntity = (id: string) => api.delete(`/entities/${id}`)
 
 // Documents
@@ -27,9 +28,7 @@ export const getExpiringDocuments = (days = 30) =>
   api.get('/documents/expiring', { params: { days } }).then(r => r.data)
 export const updateDocumentStatus = (id: string, status: string) =>
   api.patch(`/documents/${id}/status`, { status }).then(r => r.data)
-export const getDocumentDownloadUrl = (id: string) =>
-  `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/documents/${id}/download`
-
+export const getDocumentDownloadUrl = (id: string) => `/api/v1/documents/${id}/download`
 export const uploadDocument = (formData: FormData) =>
   api.post('/documents/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
