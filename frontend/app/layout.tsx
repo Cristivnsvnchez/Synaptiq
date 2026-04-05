@@ -14,11 +14,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr" className={`${geist.variable}`}>
-      <body className="antialiased">
+      <body className="antialiased bg-[#111918]">
         <Providers>
           <div className="flex min-h-screen">
             <Sidebar />
-            <main className="flex-1 ml-60 min-h-screen bg-[#F4F5F7]">
+            <main className="flex-1 ml-60 min-h-screen bg-[#111918]">
               {children}
             </main>
           </div>

@@ -40,33 +40,34 @@
 }
 
 :root {
-  --background: #F4F5F7;
-  --foreground: #1a1a2e;
-  --card: #ffffff;
-  --card-foreground: #1a1a2e;
-  --popover: #ffffff;
-  --popover-foreground: #1a1a2e;
-  --primary: #5b4fcf;
-  --primary-foreground: #ffffff;
-  --secondary: #ede9fe;
-  --secondary-foreground: #5b4fcf;
-  --muted: #f1f0ff;
-  --muted-foreground: #6b7280;
-  --accent: #ede9fe;
-  --accent-foreground: #5b4fcf;
-  --destructive: #ef4444;
-  --border: #e5e7eb;
-  --input: #e5e7eb;
-  --ring: #5b4fcf;
-  --radius: 0.75rem;
-  --sidebar: #1e1b4b;
-  --sidebar-foreground: #c4b5fd;
-  --sidebar-primary: #5b4fcf;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #312e81;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #312e81;
-  --sidebar-ring: #5b4fcf;
+  /* Dark forest theme — inspired by Tide */
+  --background: #111918;
+  --foreground: #dce8e1;
+  --card: #182421;
+  --card-foreground: #dce8e1;
+  --popover: #1e2e29;
+  --popover-foreground: #dce8e1;
+  --primary: #5cc987;
+  --primary-foreground: #0d1a13;
+  --secondary: #1e2e28;
+  --secondary-foreground: #8db89e;
+  --muted: #162019;
+  --muted-foreground: #6e9480;
+  --accent: #1e2e28;
+  --accent-foreground: #8db89e;
+  --destructive: #e05555;
+  --border: #243028;
+  --input: #1e2d27;
+  --ring: #5cc987;
+  --radius: 0.875rem;
+  --sidebar: #0c1210;
+  --sidebar-foreground: #7a9a86;
+  --sidebar-primary: #5cc987;
+  --sidebar-primary-foreground: #0d1a13;
+  --sidebar-accent: #182421;
+  --sidebar-accent-foreground: #dce8e1;
+  --sidebar-border: #182421;
+  --sidebar-ring: #5cc987;
 }
 
 @layer base {
@@ -76,4 +77,9 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Custom scrollbar for dark theme */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #243028; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #2e3e36; }
 }
