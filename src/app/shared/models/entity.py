@@ -19,6 +19,6 @@ class Entity(Base, TimestampMixin):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     domain: Mapped["Domain"] = relationship(back_populates="entities")
-    documents: Mapped[List["Document"]] = relationship(back_populates="entity")
-    accesses: Mapped[List["Access"]] = relationship(back_populates="entity")
-    reminders: Mapped[List["Reminder"]] = relationship(back_populates="entity")
+    documents: Mapped[List["Document"]] = relationship(back_populates="entity", cascade="all, delete-orphan")
+    accesses: Mapped[List["Access"]] = relationship(back_populates="entity", cascade="all, delete-orphan")
+    reminders: Mapped[List["Reminder"]] = relationship(back_populates="entity", cascade="all, delete-orphan")

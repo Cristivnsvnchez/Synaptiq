@@ -1,11 +1,11 @@
 'use client'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'next/navigation'
-import { getEntity, getDocuments, getAccesses, getReminders, uploadDocument, createAccess, dismissReminder, updateDocumentStatus, getDocumentDownloadUrl, updateEntity } from '@/lib/api'
-import { Entity, Document, Access, Reminder } from '@/types'
+import { getEntity, getDocuments, getAccesses, getReminders, uploadDocument, createAccess, dismissReminder, updateDocumentStatus, getDocumentDownloadUrl, getDocumentPreviewUrl, updateEntity, analyzeDocument } from '@/lib/api'
+import { Entity, Document, Access, Reminder, DocumentAnalysis } from '@/types'
 import { useState, useRef } from 'react'
 import Link from 'next/link'
-import { Upload, Link as LinkIcon, Bell, Download, Archive, Plus, Loader2, ExternalLink, ChevronLeft, Edit2, Check, X } from 'lucide-react'
+import { Upload, Link as LinkIcon, Bell, Download, Archive, Plus, Loader2, ExternalLink, ChevronLeft, Edit2, Check, X, Eye, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const BILLING_CYCLES = [
@@ -36,6 +36,9 @@ export default function SubscriptionDetailPage() {
   const queryClient = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  const [previewDoc, setPreviewDoc] = useState<Document | null>(null)
+  const [analyzingDocId, setAnalyzingDocId] = useState<string | null>(null)
+  const [analysisResult, setAnalysisResult] = useState<{ doc: Document; data: DocumentAnalysis } | null>(null)
   const [showAccessForm, setShowAccessForm] = useState(false)
   const [accessForm, setAccessForm] = useState({ label: '', url: '', account_ref: '', notes: '' })
   const [editing, setEditing] = useState(false)
@@ -79,6 +82,28 @@ export default function SubscriptionDetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents', id] }),
   })
 
+  async function handleAnalyze(doc: Document) {
+    setAnalyzingDocId(doc.id)
+    try {
+      const data: DocumentAnalysis = await analyzeDocument(doc.id)
+      setAnalysisResult({ doc, data })
+    } finally {
+      setAnalyzingDocId(null)
+    }
+  }
+
+  function applyAnalysis(analysis: DocumentAnalysis) {
+    const s = analysis.suggested_metadata as Record<string, unknown>
+    const newMeta = { ...m }
+    if (s.price !== undefined) newMeta.price = s.price
+    if (s.billing_cycle !== undefined) newMeta.billing_cycle = s.billing_cycle
+    if (s.website !== undefined) newMeta.website = s.website
+    updateEntity(id, { metadata_: newMeta }).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['entity', id] })
+      setAnalysisResult(null)
+    })
+  }
+
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return
     setUploading(true)
@@ -94,8 +119,103 @@ export default function SubscriptionDetailPage() {
     setEditing(true)
   }
 
+  const isImage = (mime?: string) => mime?.startsWith('image/')
+  const isPdf = (mime?: string) => mime === 'application/pdf'
+  const canPreview = (doc: Document) => isImage(doc.mime_type) || isPdf(doc.mime_type)
+
   return (
     <div className="p-8">
+      {/* AI Analysis Result Modal */}
+      {analysisResult && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6" onClick={() => setAnalysisResult(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#5b4fcf]" />
+                <p className="font-semibold text-gray-800 text-sm">Données extraites — {analysisResult.doc.filename}</p>
+              </div>
+              <button onClick={() => setAnalysisResult(null)} className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              {/* Confidence */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                  <div className="h-1.5 rounded-full bg-[#5b4fcf]" style={{ width: `${Math.round(analysisResult.data.confidence * 100)}%` }} />
+                </div>
+                <span className="text-xs text-gray-400">{Math.round(analysisResult.data.confidence * 100)}% confiance</span>
+              </div>
+              {/* All extracted fields */}
+              <div className="bg-gray-50 rounded-xl p-3 space-y-1.5 max-h-48 overflow-y-auto">
+                {Object.entries(analysisResult.data.fields).map(([k, v]) => (
+                  <div key={k} className="flex gap-2 text-sm">
+                    <span className="text-gray-400 shrink-0 capitalize w-36">{k.replace(/_/g, ' ')} :</span>
+                    <span className="text-gray-700 font-medium">{String(v)}</span>
+                  </div>
+                ))}
+              </div>
+              {/* Suggested metadata to apply */}
+              {Object.keys(analysisResult.data.suggested_metadata).length > 0 && (
+                <div className="bg-[#faf9ff] border border-[#5b4fcf]/20 rounded-xl p-3">
+                  <p className="text-xs text-[#5b4fcf] font-semibold mb-2">Champs à mettre à jour</p>
+                  {Object.entries(analysisResult.data.suggested_metadata).map(([k, v]) => (
+                    <div key={k} className="flex gap-2 text-sm">
+                      <span className="text-gray-400 shrink-0 w-28 capitalize">{k.replace(/_/g, ' ')} :</span>
+                      <span className="text-[#5b4fcf] font-semibold">{String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {analysisResult.data.expires_at && (
+                <p className="text-xs text-orange-600 bg-orange-50 rounded-xl px-3 py-2">
+                  Date d'expiration détectée : <strong>{new Date(analysisResult.data.expires_at).toLocaleDateString('fr-FR')}</strong>
+                </p>
+              )}
+            </div>
+            <div className="px-6 pb-5 flex gap-2">
+              {Object.keys(analysisResult.data.suggested_metadata).length > 0 && (
+                <button onClick={() => applyAnalysis(analysisResult.data)}
+                  className="flex-1 bg-[#5b4fcf] text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-[#4c3fbd] transition-colors flex items-center justify-center gap-2">
+                  <Check className="w-4 h-4" /> Appliquer les champs
+                </button>
+              )}
+              <button onClick={() => setAnalysisResult(null)}
+                className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-sm hover:bg-gray-50 transition-colors">
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Document Preview Modal */}
+      {previewDoc && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6" onClick={() => setPreviewDoc(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+              <p className="text-sm font-semibold text-gray-700 truncate">{previewDoc.filename}</p>
+              <div className="flex items-center gap-2 shrink-0">
+                <a href={getDocumentDownloadUrl(previewDoc.id)} target="_blank"
+                  className="flex items-center gap-1 text-xs text-[#5b4fcf] hover:underline">
+                  <Download className="w-3.5 h-3.5" /> Télécharger
+                </a>
+                <button onClick={() => setPreviewDoc(null)} className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto bg-gray-50 flex items-center justify-center p-4">
+              {isImage(previewDoc.mime_type) ? (
+                <img src={getDocumentPreviewUrl(previewDoc.id)} alt={previewDoc.filename}
+                  className="max-w-full max-h-[70vh] object-contain rounded-lg shadow" />
+              ) : isPdf(previewDoc.mime_type) ? (
+                <iframe src={getDocumentPreviewUrl(previewDoc.id)} className="w-full h-[70vh] rounded-lg border-0" title={previewDoc.filename} />
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
       {/* Breadcrumb */}
       <Link href="/domains/subscriptions" className="flex items-center gap-1 text-sm text-gray-400 hover:text-[#5b4fcf] mb-6 w-fit">
         <ChevronLeft className="w-4 h-4" /> Abonnements
@@ -215,6 +335,17 @@ export default function SubscriptionDetailPage() {
                     </div>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    <button onClick={() => handleAnalyze(doc)} disabled={analyzingDocId === doc.id}
+                      className="w-7 h-7 rounded-lg hover:bg-[#ede9fe] flex items-center justify-center" title="Analyser avec l'IA">
+                      {analyzingDocId === doc.id
+                        ? <Loader2 className="w-3.5 h-3.5 text-[#5b4fcf] animate-spin" />
+                        : <Sparkles className="w-3.5 h-3.5 text-[#5b4fcf]" />}
+                    </button>
+                    {canPreview(doc) && (
+                      <button onClick={() => setPreviewDoc(doc)} className="w-7 h-7 rounded-lg hover:bg-white flex items-center justify-center">
+                        <Eye className="w-3.5 h-3.5 text-[#5b4fcf]" />
+                      </button>
+                    )}
                     <a href={getDocumentDownloadUrl(doc.id)} target="_blank" className="w-7 h-7 rounded-lg hover:bg-white flex items-center justify-center">
                       <Download className="w-3.5 h-3.5 text-gray-500" />
                     </a>

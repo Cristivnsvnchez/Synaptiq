@@ -16,6 +16,75 @@ from app.services.document_service import create_expiry_reminders, sync_expired_
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 
+@router.post("/analyze-file")
+async def analyze_file_upload(file: UploadFile = File(...)):
+    """Analyze a file with Claude OCR/Vision and return structured fields.
+    Does not store the file — used for pre-filling forms before entity creation."""
+    content = await file.read()
+    mime = file.content_type or ""
+    filename = file.filename or ""
+
+    from app.ai.extraction import extract_text_from_pdf
+    from app.ai.structuring import call_claude, call_claude_with_image
+    import json
+
+    IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+
+    SYSTEM = """You are a document analysis AI. Extract all structured data from the document.
+Always respond with valid JSON only, no explanation, no markdown."""
+
+    PROMPT = """Analyze this document and extract all relevant information. Return a JSON object with:
+- "name": the service/company/vendor name (string)
+- "price": the subscription or invoice amount as a number (e.g. 21.78). Use the recurring amount if visible, otherwise the total.
+- "billing_cycle": one of "monthly", "yearly", "weekly", "one_time" — infer from the document
+- "website": the service website if visible (string or null)
+- "category": one of Streaming, Logiciel, Cloud, Gaming, Musique, Presse, Fitness, Utilitaire, Autre
+- "currency": currency code (e.g. "EUR", "USD")
+- "fields": object with ALL other extracted data (dates, references, addresses, VAT, totals, IBAN, etc.)
+- "expires_at": ISO date string if a due date or validity date is found, null otherwise
+- "confidence": float 0.0 to 1.0
+
+Respond ONLY with valid JSON."""
+
+    try:
+        if mime in IMAGE_TYPES or filename.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+            raw = await call_claude_with_image(content, mime or "image/jpeg", PROMPT, system=SYSTEM)
+        elif mime == "application/pdf" or filename.lower().endswith(".pdf"):
+            text = extract_text_from_pdf(content)
+            if not text:
+                raise HTTPException(status_code=422, detail="Impossible d'extraire le texte du PDF")
+            raw = await call_claude(f"{PROMPT}\n\nDocument:\n---\n{text[:6000]}", system=SYSTEM)
+        else:
+            try:
+                text = content.decode("utf-8", errors="ignore")[:6000]
+            except Exception:
+                raise HTTPException(status_code=422, detail="Format de fichier non supporté")
+            raw = await call_claude(f"{PROMPT}\n\nDocument:\n---\n{text}", system=SYSTEM)
+
+        raw = raw.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        result = json.loads(raw.strip())
+        result.setdefault("name", "")
+        result.setdefault("price", None)
+        result.setdefault("billing_cycle", "monthly")
+        result.setdefault("website", None)
+        result.setdefault("category", "Autre")
+        result.setdefault("currency", "EUR")
+        result.setdefault("fields", {})
+        result.setdefault("expires_at", None)
+        result.setdefault("confidence", 0.5)
+        return result
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="L'IA n'a pas retourné de JSON valide")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analyse échouée : {str(e)}")
+
+
 @router.post("/upload", response_model=DocumentOut, status_code=201)
 async def upload_document(
     entity_id: str = Form(...),
@@ -116,6 +185,86 @@ async def download_document(doc_id: str, db: AsyncSession = Depends(get_db)):
     if not doc or not os.path.exists(doc.filepath):
         raise HTTPException(status_code=404, detail="Document not found")
     return FileResponse(doc.filepath, filename=doc.filename)
+
+
+@router.post("/{doc_id}/analyze")
+async def analyze_document(doc_id: str, db: AsyncSession = Depends(get_db)):
+    """Run Claude OCR/Vision on a document and return extracted structured fields."""
+    result = await db.execute(select(Document).where(Document.id == doc_id))
+    doc = result.scalar_one_or_none()
+    if not doc or not os.path.exists(doc.filepath):
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    with open(doc.filepath, "rb") as f:
+        content = f.read()
+
+    from app.ai.extraction import extract_text_from_pdf
+    from app.ai.structuring import call_claude, call_claude_with_image
+    import json
+
+    IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+    mime = doc.mime_type or ""
+
+    SYSTEM = """You are a document analysis AI. Extract all useful structured data from the document.
+Always respond with valid JSON only, no explanation, no markdown."""
+
+    PROMPT = """Analyze this document and return a JSON object with:
+- "fields": object with all extracted data (amounts, dates, names, references, addresses, cycle, vendor, etc.)
+  Use clear snake_case keys like: amount, currency, billing_cycle, vendor, issue_date, due_date, period, reference, total_ht, total_ttc, vat, iban
+  For billing_cycle use: "monthly", "yearly", "weekly", or "one_time"
+  For amounts use numeric values (not strings)
+- "suggested_metadata": object with only the fields relevant to update entity metadata (e.g. price, billing_cycle, website)
+- "expires_at": ISO date string if a due date or validity date is found, null otherwise
+- "confidence": float 0.0 to 1.0
+
+Respond ONLY with valid JSON."""
+
+    try:
+        if mime in IMAGE_TYPES or doc.filename.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+            raw = await call_claude_with_image(content, mime or "image/jpeg", PROMPT, system=SYSTEM)
+        elif mime == "application/pdf" or doc.filename.lower().endswith(".pdf"):
+            text = extract_text_from_pdf(content)
+            if not text:
+                raise HTTPException(status_code=422, detail="Could not extract text from PDF")
+            raw = await call_claude(f"{PROMPT}\n\nDocument content:\n---\n{text[:6000]}", system=SYSTEM)
+        else:
+            try:
+                text = content.decode("utf-8", errors="ignore")[:6000]
+            except Exception:
+                raise HTTPException(status_code=422, detail="Unsupported file type for analysis")
+            raw = await call_claude(f"{PROMPT}\n\nDocument content:\n---\n{text}", system=SYSTEM)
+
+        raw = raw.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        extracted = json.loads(raw.strip())
+        extracted.setdefault("fields", {})
+        extracted.setdefault("suggested_metadata", {})
+        extracted.setdefault("expires_at", None)
+        extracted.setdefault("confidence", 0.5)
+        return extracted
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="AI returned invalid JSON")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+@router.get("/{doc_id}/preview")
+async def preview_document(doc_id: str, db: AsyncSession = Depends(get_db)):
+    """Serve a document inline for browser preview (PDF, images)."""
+    result = await db.execute(select(Document).where(Document.id == doc_id))
+    doc = result.scalar_one_or_none()
+    if not doc or not os.path.exists(doc.filepath):
+        raise HTTPException(status_code=404, detail="Document not found")
+    return FileResponse(
+        doc.filepath,
+        media_type=doc.mime_type or "application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="{doc.filename}"'},
+    )
 
 
 @router.patch("/{doc_id}/status", response_model=DocumentOut)

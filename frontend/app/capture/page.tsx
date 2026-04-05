@@ -165,8 +165,13 @@ export default function CapturePage() {
 
       {/* Error */}
       {capture.isError && (
-        <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-600 text-sm">
-          Erreur lors de l'analyse. Vérifie que l'API tourne et que ta clé Anthropic est configurée.
+        <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-600 text-sm space-y-1">
+          <p className="font-semibold">Erreur lors de l'analyse</p>
+          <p className="text-red-500">
+            {(capture.error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+              || (capture.error as Error)?.message
+              || 'Vérifie que l\'API tourne et que ta clé Anthropic est configurée.'}
+          </p>
         </div>
       )}
 
@@ -222,11 +227,22 @@ export default function CapturePage() {
             </div>
           )}
 
+          {result.notes && (
+            <div className="mt-4">
+              <p className="text-xs text-gray-400 mb-2">Contenu wiki généré</p>
+              <div className="bg-[#faf9ff] border border-[#5b4fcf]/10 rounded-xl p-3 max-h-40 overflow-y-auto">
+                <pre className="text-xs text-gray-600 whitespace-pre-wrap font-sans leading-relaxed">{result.notes}</pre>
+              </div>
+            </div>
+          )}
+
           {result.entity_id && (
             <div className="mt-5 pt-4 border-t border-gray-100">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-green-600 font-medium">✓ Entité créée automatiquement</p>
-                <a href={`/entities/${result.entity_id}`}
+                <a href={result.suggested_domain === 'learning'
+                    ? `/learning/${result.entity_id}`
+                    : `/${result.suggested_domain}/${result.entity_id}`}
                   className="flex items-center gap-1 text-sm text-[#5b4fcf] hover:underline font-medium">
                   Voir l'entité <ArrowRight className="w-3.5 h-3.5" />
                 </a>

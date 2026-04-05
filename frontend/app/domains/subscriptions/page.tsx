@@ -1,10 +1,10 @@
 'use client'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getDomain, getEntities, createEntity, deleteEntity } from '@/lib/api'
+import { getDomain, getEntities, createEntity, deleteEntity, analyzeFileUpload } from '@/lib/api'
 import { Entity, Domain } from '@/types'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Link from 'next/link'
-import { Plus, Trash2, TrendingUp, TrendingDown, Package, ExternalLink, Loader2 } from 'lucide-react'
+import { Plus, Trash2, TrendingDown, ExternalLink, Loader2, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const CATEGORIES = ['Streaming', 'Logiciel', 'Cloud', 'Gaming', 'Musique', 'Presse', 'Fitness', 'Utilitaire', 'Autre']
@@ -53,6 +53,10 @@ function monthlyPrice(price: number, cycle: string): number {
 export default function SubscriptionsPage() {
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [ocrAnalyzing, setOcrAnalyzing] = useState(false)
+  const [ocrError, setOcrError] = useState<string | null>(null)
+  const ocrRef = useRef<HTMLInputElement>(null)
   const [form, setForm] = useState({
     name: '', category: 'Autre', price: '', billing_cycle: 'monthly', website: '', notes: ''
   })
@@ -78,20 +82,51 @@ export default function SubscriptionsPage() {
         category: form.category,
         price: parseFloat(form.price) || 0,
         billing_cycle: form.billing_cycle,
-        website: form.website,
+        website: form.website || undefined,
       },
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['entities', 'subscriptions'] })
       setShowForm(false)
+      setOcrAnalyzing(false)
+      setOcrError(null)
       setForm({ name: '', category: 'Autre', price: '', billing_cycle: 'monthly', website: '', notes: '' })
     },
   })
 
   const remove = useMutation({
     mutationFn: deleteEntity,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['entities', 'subscriptions'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['entities', 'subscriptions'] })
+      setConfirmDeleteId(null)
+    },
   })
+
+  async function handleOcrFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setOcrAnalyzing(true)
+    setOcrError(null)
+    if (ocrRef.current) ocrRef.current.value = ''
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const result = await analyzeFileUpload(fd)
+      setForm(f => ({
+        name: result.name || f.name,
+        price: result.price != null ? String(result.price) : f.price,
+        billing_cycle: result.billing_cycle || f.billing_cycle,
+        category: result.category || f.category,
+        website: result.website || f.website,
+        notes: f.notes,
+      }))
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setOcrError(msg || 'Analyse échouée — vérifie que le serveur est démarré et la clé Anthropic configurée.')
+    } finally {
+      setOcrAnalyzing(false)
+    }
+  }
 
   // Financial summary
   const totalMonthly = entities.reduce((sum, e) => {
@@ -148,7 +183,31 @@ export default function SubscriptionsPage() {
       {/* Add form */}
       {showForm && (
         <div className="bg-white border border-[#5b4fcf]/20 rounded-2xl p-5 mb-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Nouvel abonnement</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-gray-700">Nouvel abonnement</h3>
+            <button
+              onClick={() => ocrRef.current?.click()}
+              disabled={ocrAnalyzing}
+              className="flex items-center gap-1.5 text-xs font-medium text-[#5b4fcf] bg-[#ede9fe] hover:bg-[#ddd6fe] px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+              {ocrAnalyzing
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Analyse en cours...</>
+                : <><Sparkles className="w-3.5 h-3.5" /> OCR me</>}
+            </button>
+            <input ref={ocrRef} type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.webp" onChange={handleOcrFile} />
+          </div>
+
+          {ocrAnalyzing && (
+            <div className="mb-4 flex items-center gap-2 text-xs text-[#5b4fcf] bg-[#faf9ff] border border-[#5b4fcf]/20 rounded-xl px-3 py-2">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Claude analyse la facture et remplit les champs automatiquement...
+            </div>
+          )}
+          {ocrError && (
+            <div className="mb-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+              {ocrError}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <input placeholder="Nom (ex: Netflix, Adobe CC...)" value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
@@ -176,7 +235,7 @@ export default function SubscriptionsPage() {
               className="col-span-2 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5b4fcf]/30 resize-none" />
           </div>
           <div className="flex gap-2 mt-3">
-            <button onClick={() => create.mutate()} disabled={!form.name || !form.price || create.isPending}
+            <button onClick={() => create.mutate()} disabled={!form.name || create.isPending}
               className="bg-[#5b4fcf] text-white px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50 flex items-center gap-2 hover:bg-[#4c3fbd] transition-colors">
               {create.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Ajouter'}
             </button>
@@ -245,10 +304,25 @@ export default function SubscriptionsPage() {
                     className="flex-1 text-center bg-[#ede9fe] text-[#5b4fcf] rounded-xl py-2 text-xs font-semibold hover:bg-[#ddd6fe] transition-colors">
                     Voir plus
                   </Link>
-                  <button onClick={() => remove.mutate(entity.id)}
-                    className="w-8 h-8 rounded-xl hover:bg-red-50 flex items-center justify-center transition-colors">
-                    <Trash2 className="w-3.5 h-3.5 text-red-300 hover:text-red-500" />
-                  </button>
+                  {confirmDeleteId === entity.id ? (
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => remove.mutate(entity.id)}
+                        disabled={remove.isPending}
+                        className="px-2 h-8 rounded-xl bg-red-500 text-white text-xs font-semibold hover:bg-red-600 transition-colors flex items-center gap-1">
+                        {remove.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Supprimer'}
+                      </button>
+                      <button onClick={() => setConfirmDeleteId(null)}
+                        className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setConfirmDeleteId(entity.id)}
+                      className="w-8 h-8 rounded-xl hover:bg-red-50 flex items-center justify-center transition-colors group/del">
+                      <Trash2 className="w-3.5 h-3.5 text-red-300 group-hover/del:text-red-500 transition-colors" />
+                    </button>
+                  )}
                 </div>
               </div>
             )

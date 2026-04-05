@@ -5,7 +5,7 @@ import { getDomain, getEntities, createEntity, deleteEntity } from '@/lib/api'
 import { Entity, Domain } from '@/types'
 import { useState } from 'react'
 import Link from 'next/link'
-import { Plus, Trash2, ChevronRight, Loader2 } from 'lucide-react'
+import { Plus, Trash2, ChevronRight, Loader2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const ENTITY_TYPES: Record<string, string[]> = {
@@ -28,6 +28,7 @@ export default function DomainPage() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [form, setForm] = useState({ name: '', type: '' })
 
   const { data: domain } = useQuery<Domain>({ queryKey: ['domain', slug], queryFn: () => getDomain(slug) })
@@ -47,7 +48,10 @@ export default function DomainPage() {
 
   const remove = useMutation({
     mutationFn: deleteEntity,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['entities', slug] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['entities', slug] })
+      setConfirmDeleteId(null)
+    },
   })
 
   const types = ENTITY_TYPES[slug] || ['document']
@@ -119,7 +123,7 @@ export default function DomainPage() {
             <div key={entity.id}
               className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md hover:border-[#5b4fcf]/20 transition-all group">
               <div className="flex items-start justify-between">
-                <Link href={`/entities/${entity.id}`} className="flex-1">
+                <Link href={`/${slug}/${entity.id}`} className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs bg-[#ede9fe] text-[#5b4fcf] px-2 py-0.5 rounded-full font-medium">
                       {entity.type.replace(/_/g, ' ')}
@@ -133,16 +137,31 @@ export default function DomainPage() {
                     {new Date(entity.created_at).toLocaleDateString('fr-FR')}
                   </p>
                 </Link>
-                <div className="flex items-center gap-1 ml-2">
-                  <Link href={`/entities/${entity.id}`}
-                    className="w-7 h-7 rounded-lg hover:bg-[#ede9fe] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+                <div className="flex items-center gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-all">
+                  <Link href={`/${slug}/${entity.id}`}
+                    className="w-7 h-7 rounded-lg hover:bg-[#ede9fe] flex items-center justify-center">
                     <ChevronRight className="w-4 h-4 text-[#5b4fcf]" />
                   </Link>
-                  <button
-                    onClick={() => remove.mutate(entity.id)}
-                    className="w-7 h-7 rounded-lg hover:bg-red-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
-                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                  </button>
+                  {confirmDeleteId === entity.id ? (
+                    <>
+                      <button
+                        onClick={() => remove.mutate(entity.id)}
+                        disabled={remove.isPending}
+                        className="h-7 px-2 rounded-lg bg-red-500 text-white text-xs font-semibold hover:bg-red-600 transition-colors flex items-center gap-1">
+                        {remove.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'OK?'}
+                      </button>
+                      <button onClick={() => setConfirmDeleteId(null)}
+                        className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center">
+                        <X className="w-3.5 h-3.5 text-gray-400" />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDeleteId(entity.id)}
+                      className="w-7 h-7 rounded-lg hover:bg-red-50 flex items-center justify-center group/del">
+                      <Trash2 className="w-3.5 h-3.5 text-red-300 group-hover/del:text-red-500 transition-colors" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

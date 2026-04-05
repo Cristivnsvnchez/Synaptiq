@@ -91,6 +91,13 @@ export interface DashboardData {
   expired_count: number
 }
 
+export interface DocumentAnalysis {
+  fields: Record<string, unknown>
+  suggested_metadata: Record<string, unknown>
+  expires_at: string | null
+  confidence: number
+}
+
 export interface CaptureResult {
   suggested_domain: string
   suggested_entity_type: string
@@ -98,6 +105,7 @@ export interface CaptureResult {
   extracted_data: Record<string, unknown>
   expires_at: string | null
   confidence: number
+  notes?: string | null
   entity_id?: string
   document_id?: string
 }

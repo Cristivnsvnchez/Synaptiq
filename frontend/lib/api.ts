@@ -29,6 +29,12 @@ export const getExpiringDocuments = (days = 30) =>
 export const updateDocumentStatus = (id: string, status: string) =>
   api.patch(`/documents/${id}/status`, { status }).then(r => r.data)
 export const getDocumentDownloadUrl = (id: string) => `/api/v1/documents/${id}/download`
+export const getDocumentPreviewUrl = (id: string) => `/api/v1/documents/${id}/preview`
+export const analyzeDocument = (id: string) => api.post(`/documents/${id}/analyze`).then(r => r.data)
+export const analyzeFileUpload = (formData: FormData) =>
+  api.post('/documents/analyze-file', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data)
 export const uploadDocument = (formData: FormData) =>
   api.post('/documents/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },

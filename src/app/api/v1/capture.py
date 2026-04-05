@@ -97,12 +97,32 @@ async def _create_from_result(
     if not domain:
         raise HTTPException(status_code=400, detail=f"Unknown domain: {result['suggested_domain']}")
 
+    # For learning domain, promote extracted learning fields to top-level metadata
+    metadata = result.get("extracted_data", {}) or {}
+    if result["suggested_domain"] == "learning":
+        # Ensure learning-specific fields are at the top level of metadata
+        for field in ("vendor", "type", "certification_name", "exam_code", "cert_status", "official_url", "sandbox_url"):
+            if field in metadata:
+                pass  # already there
+        # If type not set, derive from entity type
+        if "type" not in metadata:
+            etype = result.get("suggested_entity_type", "")
+            if etype in ("certification", "certification_prep"):
+                metadata["type"] = "certification_prep"
+            elif etype in ("sandbox", "labs"):
+                metadata["type"] = "sandbox"
+            else:
+                metadata["type"] = "notes_techniques"
+        if "vendor" not in metadata:
+            metadata["vendor"] = "Autre"
+
     # Create entity
     entity = Entity(
         domain_id=domain.id,
         name=result["suggested_name"],
         type=result["suggested_entity_type"],
-        metadata_=result.get("extracted_data"),
+        metadata_=metadata,
+        notes=result.get("notes"),
     )
     db.add(entity)
     await db.commit()
